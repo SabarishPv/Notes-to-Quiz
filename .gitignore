@@ -1,0 +1,20 @@
+.neon
+
+# JavaScript dependencies
+node_modules/
+frontend/node_modules/
+
+# Python virtual environment
+venv2/
+
+# Local environment variables
+.env
+frontend/.env
+
+# macOS files
+.DS_Store
+
+.env
+backend/.env
+__pycache__/
+*.pyc

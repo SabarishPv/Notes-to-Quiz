@@ -6,6 +6,62 @@ import { useApi } from "./api";
 
 const MIN_CHARS = 100;
 
+const SOURCES = [
+  {
+    value: "notes",
+    label: "Paste notes",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+        <path d="M14 3v5h5" />
+        <path d="M9 13h6M9 17h6M9 9h1" />
+      </svg>
+    ),
+  },
+  {
+    value: "file",
+    label: "Upload file",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+        <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+      </svg>
+    ),
+  },
+  {
+    value: "url",
+    label: "Import URL",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9.5 14.5 14.5 9.5" />
+        <path d="M11 6.5 12.4 5a3.5 3.5 0 0 1 5 5L16 11.4" />
+        <path d="M13 17.5 11.6 19a3.5 3.5 0 0 1-5-5L8 12.6" />
+      </svg>
+    ),
+  },
+];
+
+function LogoMark() {
+  return (
+    <span className="logo-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M13 2 3 14h7l-1 8 11-13h-7z" />
+      </svg>
+    </span>
+  );
+}
+
+function EmptyState({ icon, title, subtitle, action }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon" aria-hidden="true">{icon}</div>
+      <h3>{title}</h3>
+      <p>{subtitle}</p>
+      {action}
+    </div>
+  );
+}
+
 export default function App() {
   const { generateSet, generateUpload, fetchHistory, saveResult, regenerate, wakeServer } = useApi();
   const { user } = useUser();
@@ -100,12 +156,21 @@ export default function App() {
   return (
     <main className="app">
       <header className="masthead">
-        <div>
-          <h1>Notes to quiz</h1>
-          <p>Paste your notes. Get a summary and five questions to test yourself.</p>
+        <div className="brand">
+          <LogoMark />
+          <div>
+            <h1>Notes to quiz</h1>
+            <p>Paste your notes. Get a summary and five questions to test yourself.</p>
+          </div>
         </div>
         <SignedIn>
           <div className="header-tools">
+            {user && (
+              <span className="user-chip">
+                <span className="user-dot" aria-hidden="true" />
+                {user.primaryEmailAddress?.emailAddress}
+              </span>
+            )}
             <label className="theme-control">
               <span>Appearance</span>
               <select value={theme} onChange={(event) => setTheme(event.target.value)} aria-label="Appearance">
@@ -121,14 +186,12 @@ export default function App() {
 
       <SignedOut>
         <section className="signin">
-          <p className="notice">Sign in to generate and save quizzes.</p>
+          <p className="signin-lede">Sign in to generate and save quizzes.</p>
           <SignIn routing="hash" />
         </section>
       </SignedOut>
 
       <SignedIn>
-
-      {user && <p className="greeting">Signed in as {user.primaryEmailAddress?.emailAddress}</p>}
 
       <nav className="tabs">
         <button
@@ -163,8 +226,16 @@ export default function App() {
           </div>
           <div className="create-panel">
           <div className="source-switcher">
-            {[["notes", "Paste notes"], ["file", "Upload PDF or text"], ["url", "Import URL"]].map(([value, label]) => (
-              <button key={value} className={source === value ? "tab is-active" : "tab"} onClick={() => setSource(value)}>{label}</button>
+            {SOURCES.map(({ value, label, icon }) => (
+              <button
+                key={value}
+                type="button"
+                className={source === value ? "source-tab is-active" : "source-tab"}
+                onClick={() => setSource(value)}
+              >
+                <span className="source-tab-icon" aria-hidden="true">{icon}</span>
+                {label}
+              </button>
             ))}
           </div>
           <label className="field-label" htmlFor="test-name">Test name</label>
@@ -178,16 +249,25 @@ export default function App() {
               {source === "notes" ? `${notes.trim().length} characters${!sourceReady ? ` — need at least ${MIN_CHARS}` : ""}` : "The source will be read and saved with this test."}
             </span>
             <button
+              type="button"
               className="primary"
               onClick={handleGenerate}
               disabled={!sourceReady || status !== "idle"}
             >
+              {status === "working" && <span className="spinner" aria-hidden="true" />}
               {status === "working" ? "Generating" : "Generate quiz"}
             </button>
           </div>
 
           </div>
-          {current && <QuizCard set={current} onSubmit={handleSubmit} onRegenerate={handleRegenerate} />}
+          {current && (
+            <QuizCard
+              set={current}
+              onSubmit={handleSubmit}
+              onRegenerate={handleRegenerate}
+              regenerating={status === "working"}
+            />
+          )}
         </section>
       )}
 
@@ -205,7 +285,21 @@ export default function App() {
             </select>
           </div>
           {history.length === 0 ? (
-            <p className="notice">Nothing saved yet. Generate a quiz first.</p>
+            <EmptyState
+              icon={(
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z" />
+                  <path d="M4 7.5 12 12l8-4.5M12 12v9" />
+                </svg>
+              )}
+              title="Nothing saved yet"
+              subtitle="Generate your first quiz and it'll show up here, ready to retake any time."
+              action={(
+                <button type="button" className="primary" onClick={() => switchTab("create")}>
+                  Create a quiz
+                </button>
+              )}
+            />
           ) : (
             <div className="saved-layout">
               <div className="test-list" role="list">
@@ -238,6 +332,7 @@ export default function App() {
                     set={selectedSet}
                     onSubmit={handleSubmit}
                     onRegenerate={handleRegenerate}
+                    regenerating={status === "working"}
                   />
                 )}
               </div>

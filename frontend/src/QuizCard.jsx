@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 
-function Question({ item, index, answer, locked, onChoose }) {
+function Question({ item, index, answer, revealed, disabled, onChoose }) {
   function optionClass(optionIndex) {
-    if (!locked) return optionIndex === answer ? "option is-selected" : "option";
-    if (optionIndex === item.correct_index) return "option is-correct";
-    if (optionIndex === answer) return "option is-wrong";
-    return "option is-muted";
+    if (revealed) {
+      if (optionIndex === item.correct_index) return "option is-correct";
+      if (optionIndex === answer) return "option is-wrong";
+      return "option is-muted";
+    }
+    return optionIndex === answer ? "option is-selected" : "option";
   }
 
   return (
-    <li className="question">
+    <li className="question" style={{ "--i": index }}>
       <p className="question-text">
         <span className="question-number">{index + 1}</span>
         {item.question}
@@ -22,7 +24,7 @@ function Question({ item, index, answer, locked, onChoose }) {
             type="button"
             className={optionClass(optionIndex)}
             onClick={() => onChoose(index, optionIndex)}
-            disabled={locked}
+            disabled={disabled}
             role="radio"
             aria-checked={optionIndex === answer}
           >
@@ -32,12 +34,12 @@ function Question({ item, index, answer, locked, onChoose }) {
         ))}
       </div>
 
-      {locked && <p className="explanation">{item.explanation || item.explaination || "Review the highlighted answer."}</p>}
+      {revealed && <p className="explanation">{item.explanation || item.explaination || "Review the highlighted answer."}</p>}
     </li>
   );
 }
 
-export default function QuizCard({ set, onSubmit, onRegenerate }) {
+export default function QuizCard({ set, onSubmit, onRegenerate, regenerating = false }) {
   const completed = set.score !== null && set.score !== undefined;
   const emptyAnswers = Array(set.questions.length).fill(null);
   const [answers, setAnswers] = useState(completed ? set.answers || emptyAnswers : emptyAnswers);
@@ -75,45 +77,64 @@ export default function QuizCard({ set, onSubmit, onRegenerate }) {
 
   const answeredCount = answers.filter((answer) => answer !== null).length;
   const complete = answeredCount === answers.length;
-  const locked = saved || !started;
+  const disabled = saved || !started;
 
   return (
-    <article className="card">
+    <article className="card" key={set.id}>
       <div className="card-heading">
-        <div>
+        <div className="card-heading-info">
           <p className="eyebrow">{set.source_type || "text"} source</p>
           <h2 className="test-name">{set.name || "Untitled test"}</h2>
         </div>
-        <div className={saved ? "score-block" : "score-block is-pending"}>
-          <strong className="score">{saved ? `${set.score}/${set.questions.length}` : `—/${set.questions.length}`}</strong>
-          <span>{saved ? "Total marks" : "Not taken"}</span>
+
+        <div className="card-heading-actions">
+          <div key={saved ? "saved" : "pending"} className={saved ? "score-block" : "score-block is-pending"}>
+            <strong className="score">{saved ? `${set.score}/${set.questions.length}` : `—/${set.questions.length}`}</strong>
+            <span>{saved ? "Total marks" : "Not taken"}</span>
+          </div>
+
+          {!started && (
+            <button type="button" className="primary" onClick={() => setStarted(true)}>
+              Take test
+            </button>
+          )}
+          {started && !saved && (
+            <div className="submit-cluster">
+              <button type="button" className="primary" onClick={submit} disabled={!complete || saving}>
+                {saving && <span className="spinner" aria-hidden="true" />}
+                {saving ? "Saving…" : "Submit test"}
+              </button>
+              <span className="hint">{answeredCount} / {answers.length} answered</span>
+              <div className="progress-track" aria-hidden="true">
+                <div className="progress-fill" style={{ width: `${(answeredCount / answers.length) * 100}%` }} />
+              </div>
+            </div>
+          )}
+          {saved && onRegenerate && (
+            <button type="button" className="secondary" onClick={() => onRegenerate(set)} disabled={regenerating}>
+              {regenerating && <span className="spinner spinner-dark" aria-hidden="true" />}
+              {regenerating ? "Regenerating…" : "Regenerate quiz"}
+            </button>
+          )}
         </div>
       </div>
+
       <p className="summary">{set.summary}</p>
 
-      <div className="questions-heading">
-        <h2>Questions</h2>
-        {started && !saved && (
-          <span className="progress-pill">{answeredCount} / {answers.length} answered</span>
-        )}
-      </div>
+      <h2 className="section-label">Questions</h2>
       <ol className="questions">
         {set.questions.map((item, i) => (
-          <Question key={i} item={item} index={i} answer={answers[i]} locked={locked} onChoose={choose} />
+          <Question
+            key={i}
+            item={item}
+            index={i}
+            answer={answers[i]}
+            revealed={saved}
+            disabled={disabled}
+            onChoose={choose}
+          />
         ))}
       </ol>
-      <div className="card-actions">
-        {!started && <button type="button" className="primary" onClick={() => setStarted(true)}>Take test</button>}
-        {started && !saved && (
-          <button type="button" className="primary" onClick={submit} disabled={!complete || saving}>
-            {saving ? "Saving results…" : "Submit test"}
-          </button>
-        )}
-        {saved && onRegenerate && <button type="button" className="secondary" onClick={() => onRegenerate(set)}>Regenerate quiz</button>}
-        {started && !saved && !complete && (
-          <span className="hint">{answers.length - answeredCount} question{answers.length - answeredCount === 1 ? "" : "s"} left to answer.</span>
-        )}
-      </div>
     </article>
   );
 }

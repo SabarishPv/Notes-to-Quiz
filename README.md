@@ -1,100 +1,115 @@
 # Notes to Quiz
 
-Paste your notes, upload a PDF/text file, or point at a URL — get back a short summary
-and a 5-question multiple-choice quiz to test yourself, with results and history saved
-per account.
+Turn a page of notes, a PDF, or a URL into a summary and a custom quiz. Organise
+quizzes into folders, retake them as often as you like (every attempt is scored
+and kept), and share a quiz with a public link.
 
-## How it works
+See [ROADMAP.md](ROADMAP.md) for what's shipped and what's next.
 
-- **Frontend** (`frontend/`) — React + Vite. Handles sign-in (Clerk), the create/upload
-  form, taking a quiz, and browsing saved tests.
-- **Backend** (`backend/`) — FastAPI. Verifies the Clerk session token, extracts text
-  from the pasted notes / uploaded file / URL, sends it to an LLM (via Groq) to generate
-  a summary and questions, and stores everything in Postgres.
-- **Auth** — [Clerk](https://clerk.com). The frontend signs the user in and attaches a
-  session token to every API request; the backend verifies that token on each request.
-- **LLM** — Groq-hosted model (OpenAI-compatible API), prompted to return a summary plus
-  5 multiple-choice questions as strict JSON.
-- **Database** — Postgres, accessed through SQLAlchemy. Schema is created and
-  lightly migrated automatically on startup (see `backend/app/db.py`).
+## Features
 
-## Project layout
+- **Sources** — paste notes, upload a PDF/TXT/Markdown file, or import a URL.
+- **Configurable generation** — pick the number of questions (3–15) and the
+  question types (multiple choice, true/false) per quiz.
+- **Folders** — group quizzes by subject. Deleting a folder deletes the quizzes
+  inside it (with a confirm).
+- **Repeat attempts** — "Retake" scores a fresh attempt; the quiz shows how many
+  times it's been taken and your best score, with a full attempt history.
+- **Shareable links** — mint a public `/s/<token>` link. Anyone can take it
+  without an account; they enter an optional name and their attempts are counted
+  separately from yours.
+- Light / dark / system theme.
+
+## Architecture
 
 ```
-backend/
-  app/
-    main.py    API routes: generate, upload/URL ingest, history, submit answers, regenerate
-    llm.py     Prompting Groq and validating its JSON response
-    auth.py    Clerk token verification (FastAPI dependency)
-    db.py      SQLAlchemy models + engine + startup migrations
-  requirements.txt
-  .env.example
-
-frontend/
+frontend/                     React + Vite SPA (Clerk auth, React Router)
   src/
-    App.jsx       Tabs (Create / Saved), sign-in gate, top-level state
-    QuizCard.jsx   Taking a quiz / reviewing a completed one
-    api.js         Thin fetch wrapper that attaches the Clerk token
-  .env.example
+    App.jsx                    routes: /  ·  /studio  ·  /s/:token
+    pages/       Landing · Studio · SharedQuiz
+    components/  QuizCard · SourceForm · QuizConfig · FolderRail · …
+    lib/         api.js (fetch wrapper + endpoints) · theme.js
+  vercel.json                  SPA rewrite so deep links survive a refresh
+
+backend/                      FastAPI
+  app/
+    main.py                    app factory, CORS, router registration
+    config.py                  env-derived settings
+    database.py                engine + startup auto-migration (Postgres only)
+    models.py                  Folder · NoteSet · Attempt
+    schemas.py                 request/response models
+    auth.py                    Clerk token verification (FastAPI dependency)
+    llm.py                     Groq prompt + response validation
+    ingest.py                  URL / file text extraction
+    services.py                create / regenerate / grade / serialize
+    routers/     health · folders · quizzes · attempts · sharing
+  tests/                       pytest, SQLite, mocked model
 ```
+
+- **Auth** — [Clerk](https://clerk.com). The frontend attaches a session token to
+  every API call; the backend verifies it. Shared-quiz endpoints are public.
+- **LLM** — Groq (OpenAI-compatible API), prompted for strict JSON, validated and
+  retried once on failure.
+- **Database** — Postgres (e.g. [Neon](https://neon.tech)) via SQLAlchemy. Schema
+  is created and lightly migrated on startup; SQLite is used for the test suite.
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.11 or 3.12
 - Node 18+
-- A Postgres database (e.g. [Neon](https://neon.tech) free tier)
-- A [Clerk](https://clerk.com) application (for auth)
-- A [Groq](https://console.groq.com) API key (for quiz generation)
+- A Postgres database, a Clerk application, and a Groq API key
 
-## Backend setup
+## Run the backend
 
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in the values, see below
+cp .env.example .env          # fill in the values
 uvicorn app.main:app --reload
 ```
 
-The API runs at `http://localhost:8000`. Health check: `GET /api/health`.
+API at `http://localhost:8000` — check `GET /api/health`, browse `/docs`.
 
-### Backend environment variables
+| Variable            | Required | Notes                                          |
+| ------------------- | -------- | ---------------------------------------------- |
+| `DATABASE_URL`      | yes      | Postgres connection string                     |
+| `GROQ_API_KEY`      | yes      | from the Groq console                          |
+| `CLERK_SECRET_KEY`  | yes      | from the Clerk dashboard                       |
+| `LLM_MODEL`         | no       | defaults to `openai/gpt-oss-20b`               |
+| `CLERK_JWT_KEY`     | no       | enables local (offline) token verification    |
+| `ALLOWED_ORIGINS`   | no       | comma-separated frontend origins for CORS      |
 
-See `backend/.env.example` for the full list with descriptions. In short:
-
-| Variable            | Required | Notes                                                        |
-| ------------------- | -------- | ------------------------------------------------------------- |
-| `DATABASE_URL`      | Yes      | Postgres connection string                                    |
-| `GROQ_API_KEY`      | Yes      | From the Groq console                                         |
-| `CLERK_SECRET_KEY`  | Yes      | From the Clerk dashboard                                      |
-| `LLM_MODEL`         | No       | Defaults to `openai/gpt-oss-20b`                               |
-| `CLERK_JWT_KEY`     | No       | Enables local token verification instead of a network call    |
-| `ALLOWED_ORIGINS`   | No       | Comma-separated frontend origins allowed to call the API      |
-
-## Frontend setup
+## Run the frontend
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env   # fill in the values, see below
+cp .env.example .env          # fill in the values
 npm run dev
 ```
 
-The app runs at `http://localhost:5173`.
+App at `http://localhost:5173`.
 
-### Frontend environment variables
+| Variable                     | Required | Notes                                    |
+| ----------------------------- | -------- | ---------------------------------------- |
+| `VITE_CLERK_PUBLISHABLE_KEY`  | yes      | from the Clerk dashboard                 |
+| `VITE_API_URL`                | no       | backend base URL; default `:8000`. **No trailing slash.** |
 
-See `frontend/.env.example`. In short:
+## Tests
 
-| Variable                     | Required | Notes                                      |
-| ----------------------------- | -------- | ------------------------------------------- |
-| `VITE_CLERK_PUBLISHABLE_KEY`  | Yes      | From the Clerk dashboard                    |
-| `VITE_API_URL`                | No       | Defaults to `http://localhost:8000`         |
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
 
-## Notes
+## Deploy notes
 
-- `ALLOWED_ORIGINS` (backend) is used both for CORS and as the list of parties Clerk
-  will accept tokens from — it must match wherever the frontend is actually served.
-- Never commit `.env` files or real API keys. Only the `.env.example` files (with
-  placeholder values) belong in version control.
+- **Backend (Render):** start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+  Set `PYTHON_VERSION=3.12.7` in the dashboard. Set every required env var above;
+  `ALLOWED_ORIGINS` must include your deployed frontend origin.
+- **Frontend (Vercel):** framework "Vite", build `npm run build`, output `dist`.
+  `vercel.json` handles SPA routing. Set `VITE_API_URL` to the Render URL with no
+  trailing slash, and `VITE_CLERK_PUBLISHABLE_KEY`.
+- Never commit `.env`; only the `.env.example` files (placeholders) belong in git.

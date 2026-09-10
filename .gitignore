@@ -1,20 +1,29 @@
+# Neon
 .neon
 
 # JavaScript dependencies
 node_modules/
 frontend/node_modules/
 
-# Python virtual environment
+# Python
 venv2/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
 
 # Local environment variables
 .env
+backend/.env
 frontend/.env
 
-# macOS files
-.DS_Store
+# Build output
+frontend/dist/
 
-.env
-backend/.env
-__pycache__/
-*.pyc
+# Tooling scratch
+.playwright-mcp/
+*.local
+
+# macOS
+.DS_Store
